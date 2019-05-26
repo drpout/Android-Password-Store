@@ -20,8 +20,8 @@ abstract class PasswordStoreDb : RoomDatabase() {
         fun get(context: Context): PasswordStoreDb {
             if (instance == null) {
                 instance = Room.databaseBuilder(context.applicationContext,
-                        PasswordStoreDb::class.java, "password_store_db")
-                        .build()
+                        PasswordStoreDb::class.java, "password_store_db").
+                        allowMainThreadQueries().build()
             }
             return instance!!
         }
