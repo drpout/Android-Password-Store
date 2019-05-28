@@ -4,6 +4,9 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.preference.PreferenceManager;
 import android.util.Log;
+
+import com.zeapo.pwdstore.db.entity.StoreEntity;
+
 import org.apache.commons.io.filefilter.FileFilterUtils;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.lib.Repository;
@@ -114,12 +117,11 @@ public class PasswordRepository {
         repository = null;
     }
 
-    public static File getRepositoryDirectory(Context context) {
+    public static File getRepositoryDirectory(Context context, StoreEntity currentStore) {
         File dir = null;
-        SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(context.getApplicationContext());
 
-        if (settings.getBoolean("git_external", false)) {
-            String external_repo = settings.getString("git_external_repo", null);
+        if (currentStore.getExternal()) {
+            String external_repo = currentStore.getPath();
             if (external_repo != null) {
                 dir = new File(external_repo);
             }
@@ -130,9 +132,8 @@ public class PasswordRepository {
         return dir;
     }
 
-    public static Repository initialize(Context context) {
-        File dir = getRepositoryDirectory(context);
-        SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(context.getApplicationContext());
+    public static Repository initialize(Context context, StoreEntity currentStore) {
+        File dir = getRepositoryDirectory(context, currentStore);
 
         if (dir == null) {
             return null;
@@ -140,9 +141,9 @@ public class PasswordRepository {
 
         // uninitialize the repo if the dir does not exist or is absolutely empty
         if (!dir.exists() || !dir.isDirectory() || dir.listFiles().length == 0) {
-            settings.edit().putBoolean("repository_initialized", false).apply();
+            currentStore.setInitialized(false);
         } else {
-            settings.edit().putBoolean("repository_initialized", true).apply();
+            currentStore.setInitialized(true);
         }
 
         // create the repository static variable in PasswordRepository
