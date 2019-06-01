@@ -6,6 +6,6 @@ import com.zeapo.pwdstore.db.converter.AuthMethodTypeConverter
 
 @TypeConverters(AuthMethodTypeConverter::class)
 data class GitRemote(
-    val auth: AuthMethod,
-    @Embedded val sshKey: SshKey?
+    var auth: AuthMethod,
+    @Embedded var sshKey: SshKey?
 )
