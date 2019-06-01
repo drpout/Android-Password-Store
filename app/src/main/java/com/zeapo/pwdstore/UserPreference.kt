@@ -11,7 +11,6 @@ import android.os.Environment
 import android.preference.CheckBoxPreference
 import android.preference.Preference
 import android.preference.PreferenceFragment
-import android.preference.PreferenceManager
 import android.provider.DocumentsContract
 import android.provider.Settings
 import android.util.Log
@@ -23,6 +22,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.documentfile.provider.DocumentFile
 import com.zeapo.pwdstore.autofill.AutofillPreferenceActivity
 import com.zeapo.pwdstore.crypto.PgpActivity
+import com.zeapo.pwdstore.db.PasswordStoreDb
+import com.zeapo.pwdstore.db.entity.PgpKeyEntity
+import com.zeapo.pwdstore.db.entity.StoreEntity
 import com.zeapo.pwdstore.git.GitActivity
 import com.zeapo.pwdstore.utils.PasswordRepository
 import org.apache.commons.io.FileUtils
@@ -36,11 +38,18 @@ import java.util.*
 class UserPreference : AppCompatActivity() {
 
     private lateinit var prefsFragment: PrefsFragment
+    private lateinit var db: PasswordStoreDb
+    private lateinit var currentStore: StoreEntity
 
     class PrefsFragment : PreferenceFragment() {
+        private lateinit var db: PasswordStoreDb
+        private lateinit var currentStore: StoreEntity
+
         override fun onCreate(savedInstanceState: Bundle?) {
             super.onCreate(savedInstanceState)
             val callingActivity = activity as UserPreference
+            currentStore = callingActivity.currentStore
+            db = callingActivity.db
             val sharedPreferences = preferenceManager.sharedPreferences
 
             addPreferencesFromResource(R.xml.preference)
@@ -72,7 +81,7 @@ class UserPreference : AppCompatActivity() {
 
             findPreference("ssh_key_clear_passphrase").onPreferenceClickListener =
                     Preference.OnPreferenceClickListener {
-                        sharedPreferences.edit().putString("ssh_key_passphrase", null).apply()
+                        currentStore.gitRemote?.sshKey?.keyPassphrase = null
                         it.isEnabled = false
                         true
                     }
@@ -99,20 +108,20 @@ class UserPreference : AppCompatActivity() {
             }
 
             findPreference("git_delete_repo").onPreferenceClickListener = Preference.OnPreferenceClickListener {
-                val repoDir = PasswordRepository.getRepositoryDirectory(callingActivity.applicationContext)
+                val repoDir = PasswordRepository.getRepositoryDirectory(callingActivity.applicationContext, currentStore)
                 AlertDialog.Builder(callingActivity)
                         .setTitle(R.string.pref_dialog_delete_title)
                         .setMessage(resources.getString(R.string.dialog_delete_msg, repoDir))
                         .setCancelable(false)
                         .setPositiveButton(R.string.dialog_delete) { dialogInterface, _ ->
                             try {
-                                FileUtils.cleanDirectory(PasswordRepository.getRepositoryDirectory(callingActivity.applicationContext))
+                                FileUtils.cleanDirectory(PasswordRepository.getRepositoryDirectory(callingActivity.applicationContext, currentStore))
                                 PasswordRepository.closeRepository()
                             } catch (e: Exception) {
                                 //TODO Handle the different cases of exceptions
                             }
 
-                            sharedPreferences.edit().putBoolean("repository_initialized", false).apply()
+                            currentStore.initialized = false
                             dialogInterface.cancel()
                             callingActivity.finish()
                         }
@@ -133,7 +142,7 @@ class UserPreference : AppCompatActivity() {
             val resetRepo = Preference.OnPreferenceChangeListener { _, o ->
                 findPreference("git_delete_repo").isEnabled = !(o as Boolean)
                 PasswordRepository.closeRepository()
-                sharedPreferences.edit().putBoolean("repo_changed", true).apply()
+                currentStore.repoChanged = true
                 true
             }
 
@@ -180,30 +189,22 @@ class UserPreference : AppCompatActivity() {
         override fun onStart() {
             super.onStart()
             val sharedPreferences = preferenceManager.sharedPreferences
-            findPreference("pref_select_external").summary =
-                    preferenceManager.sharedPreferences.getString("git_external_repo", getString(R.string.no_repo_selected))
-            findPreference("ssh_see_key").isEnabled = sharedPreferences.getBoolean("use_generated_key", false)
-            findPreference("git_delete_repo").isEnabled = !sharedPreferences.getBoolean("git_external", false)
-            findPreference("ssh_key_clear_passphrase").isEnabled = sharedPreferences.getString(
-                    "ssh_key_passphrase",
-                    null
-            )?.isNotEmpty() ?: false
+            val path = currentStore.path
+            findPreference("pref_select_external").summary = if(path.isEmpty()) getString(R.string.no_repo_selected) else path
+            findPreference("ssh_see_key").isEnabled = currentStore.gitRemote?.sshKey?.generated ?: false
+            findPreference("git_delete_repo").isEnabled = !currentStore.external
+            findPreference("ssh_key_clear_passphrase").isEnabled = currentStore.gitRemote?.sshKey?.keyPassphrase?.isNotEmpty() ?: false
             findPreference("hotp_remember_clear_choice").isEnabled =
                     sharedPreferences.getBoolean("hotp_remember_check", false)
             findPreference("clear_after_copy").isEnabled = sharedPreferences.getString("general_show_time", "45")?.toInt() != 0
             findPreference("clear_clipboard_20x").isEnabled = sharedPreferences.getString("general_show_time", "45")?.toInt() != 0
             val keyPref = findPreference("openpgp_key_id_pref")
-            val selectedKeys: Array<String> = ArrayList<String>(
-                    sharedPreferences.getStringSet(
-                            "openpgp_key_ids_set",
-                            HashSet<String>()
-                    )
-            ).toTypedArray()
+            val selectedKeys: List<PgpKeyEntity> = db.pgpKeyDao().getAll(currentStore.name)
             if (selectedKeys.isEmpty()) {
                 keyPref.summary = this.resources.getString(R.string.pref_no_key_selected)
             } else {
-                keyPref.summary = selectedKeys.joinToString(separator = ";") { s ->
-                    OpenPgpUtils.convertKeyIdToHex(java.lang.Long.valueOf(s))
+                keyPref.summary = selectedKeys.joinToString(separator = ";") { keyEntity ->
+                    OpenPgpUtils.convertKeyIdToHex(java.lang.Long.valueOf(keyEntity.keyId))
                 }
             }
 
@@ -225,6 +226,17 @@ class UserPreference : AppCompatActivity() {
         fragmentManager.beginTransaction().replace(android.R.id.content, prefsFragment).commit()
 
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
+    }
+
+    public override fun onStart() {
+        super.onStart()
+        db = PasswordStoreDb.get(applicationContext)
+        currentStore = db.storeDao().getByName("default")
+    }
+
+    public override fun onStop() {
+        super.onStop()
+        db.storeDao().update(currentStore)
     }
 
     fun selectExternalGitRepository() {
@@ -342,9 +354,8 @@ class UserPreference : AppCompatActivity() {
                                 this.resources.getString(R.string.ssh_key_success_dialog_title),
                                 Toast.LENGTH_LONG
                         ).show()
-                        val prefs = PreferenceManager.getDefaultSharedPreferences(applicationContext)
 
-                        prefs.edit().putBoolean("use_generated_key", false).apply()
+                        currentStore.gitRemote?.sshKey?.generated = false
 
                         // Delete the public key from generation
                         File("""$filesDir/.ssh_key.pub""").delete()
@@ -378,17 +389,11 @@ class UserPreference : AppCompatActivity() {
                                 .setTitle(getString(R.string.sdcard_root_warning_title))
                                 .setMessage(getString(R.string.sdcard_root_warning_message))
                                 .setPositiveButton("Remove everything") { _, _ ->
-                                    PreferenceManager.getDefaultSharedPreferences(applicationContext)
-                                            .edit()
-                                            .putString("git_external_repo", uri?.path)
-                                            .apply()
+                                    currentStore.path = uri?.path ?: ""
                                 }.setNegativeButton(R.string.dialog_cancel, null).show()
                     }
 
-                    PreferenceManager.getDefaultSharedPreferences(applicationContext)
-                            .edit()
-                            .putString("git_external_repo", repoPath)
-                            .apply()
+                    currentStore.path = repoPath
                 }
                 EXPORT_PASSWORDS -> {
                     val uri = data.data
@@ -414,7 +419,7 @@ class UserPreference : AppCompatActivity() {
      */
     private fun exportPasswords(targetDirectory: DocumentFile) {
 
-        val repositoryDirectory = PasswordRepository.getRepositoryDirectory(applicationContext)
+        val repositoryDirectory = PasswordRepository.getRepositoryDirectory(applicationContext, currentStore)
         val sourcePassDir = DocumentFile.fromFile(repositoryDirectory)
 
         Log.d(TAG, "Copying ${repositoryDirectory.path} to $targetDirectory")
