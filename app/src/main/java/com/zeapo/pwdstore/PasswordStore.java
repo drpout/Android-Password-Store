@@ -134,6 +134,15 @@ public class PasswordStore extends AppCompatActivity {
     }
 
     @Override
+    public void onStart() {
+        super.onStart();
+        /* Must refresh currentStore here. The previous activity on the
+         * stack (e.g. UserPreference) may have updated it.
+         */
+        currentStore = db.storeDao().getByName("default");
+    }
+
+    @Override
     public void onResume() {
         super.onResume();
         // do not attempt to checkLocalRepository() if no storage permission: immediate crash
@@ -171,8 +180,9 @@ public class PasswordStore extends AppCompatActivity {
     }
 
     @Override
-    public void onDestroy() {
-        super.onDestroy();
+    public void onStop() {
+        super.onStop();
+        // Must save currentStore here. Next activity may need it.
         db.storeDao().update(currentStore);
     }
 
