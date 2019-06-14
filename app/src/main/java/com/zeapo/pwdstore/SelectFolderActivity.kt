@@ -6,15 +6,21 @@ import android.view.Menu
 import android.view.MenuItem
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.FragmentManager
+import com.zeapo.pwdstore.db.entity.StoreEntity
+import com.zeapo.pwdstore.db.PasswordStoreDb
 import com.zeapo.pwdstore.utils.PasswordRepository
 
 // TODO more work needed, this is just an extraction from PgpHandler
 
 class SelectFolderActivity : AppCompatActivity() {
     private lateinit var passwordList: SelectFolderFragment
+    private lateinit var db: PasswordStoreDb
+    private lateinit var currentStore: StoreEntity
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        db = PasswordStoreDb.get(this.getApplicationContext())
+        currentStore = db.storeDao().getByName("default");
 
         setContentView(R.layout.select_folder_layout)
 
@@ -24,7 +30,7 @@ class SelectFolderActivity : AppCompatActivity() {
 
         passwordList = SelectFolderFragment()
         val args = Bundle()
-        args.putString("Path", PasswordRepository.getRepositoryDirectory(applicationContext).absolutePath)
+        args.putString("Path", PasswordRepository.getRepositoryDirectory(applicationContext, currentStore).absolutePath)
 
         passwordList.arguments = args
 
