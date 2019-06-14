@@ -43,12 +43,11 @@ class UserPreference : AppCompatActivity() {
 
     class PrefsFragment : PreferenceFragment() {
         private lateinit var db: PasswordStoreDb
-        private lateinit var currentStore: StoreEntity
+        private lateinit var callingActivity: UserPreference
 
         override fun onCreate(savedInstanceState: Bundle?) {
             super.onCreate(savedInstanceState)
-            val callingActivity = activity as UserPreference
-            currentStore = callingActivity.currentStore
+            callingActivity = activity as UserPreference
             db = callingActivity.db
             val sharedPreferences = preferenceManager.sharedPreferences
 
@@ -81,7 +80,7 @@ class UserPreference : AppCompatActivity() {
 
             findPreference("ssh_key_clear_passphrase").onPreferenceClickListener =
                     Preference.OnPreferenceClickListener {
-                        currentStore.gitRemote?.sshKey?.keyPassphrase = null
+                        callingActivity.currentStore.gitRemote?.sshKey?.keyPassphrase = null
                         it.isEnabled = false
                         true
                     }
@@ -108,20 +107,20 @@ class UserPreference : AppCompatActivity() {
             }
 
             findPreference("git_delete_repo").onPreferenceClickListener = Preference.OnPreferenceClickListener {
-                val repoDir = PasswordRepository.getRepositoryDirectory(callingActivity.applicationContext, currentStore)
+                val repoDir = PasswordRepository.getRepositoryDirectory(callingActivity.applicationContext, callingActivity.currentStore)
                 AlertDialog.Builder(callingActivity)
                         .setTitle(R.string.pref_dialog_delete_title)
                         .setMessage(resources.getString(R.string.dialog_delete_msg, repoDir))
                         .setCancelable(false)
                         .setPositiveButton(R.string.dialog_delete) { dialogInterface, _ ->
                             try {
-                                FileUtils.cleanDirectory(PasswordRepository.getRepositoryDirectory(callingActivity.applicationContext, currentStore))
+                                FileUtils.cleanDirectory(PasswordRepository.getRepositoryDirectory(callingActivity.applicationContext, callingActivity.currentStore))
                                 PasswordRepository.closeRepository()
                             } catch (e: Exception) {
                                 //TODO Handle the different cases of exceptions
                             }
 
-                            currentStore.initialized = false
+                            callingActivity.currentStore.initialized = false
                             dialogInterface.cancel()
                             callingActivity.finish()
                         }
@@ -142,7 +141,7 @@ class UserPreference : AppCompatActivity() {
             val resetRepo = Preference.OnPreferenceChangeListener { _, o ->
                 findPreference("git_delete_repo").isEnabled = !(o as Boolean)
                 PasswordRepository.closeRepository()
-                currentStore.repoChanged = true
+                callingActivity.currentStore.repoChanged = true
                 true
             }
 
@@ -189,17 +188,17 @@ class UserPreference : AppCompatActivity() {
         override fun onStart() {
             super.onStart()
             val sharedPreferences = preferenceManager.sharedPreferences
-            val path = currentStore.path
+            val path = callingActivity.currentStore.path
             findPreference("pref_select_external").summary = if(path.isEmpty()) getString(R.string.no_repo_selected) else path
-            findPreference("ssh_see_key").isEnabled = currentStore.gitRemote?.sshKey?.generated ?: false
-            findPreference("git_delete_repo").isEnabled = !currentStore.external
-            findPreference("ssh_key_clear_passphrase").isEnabled = currentStore.gitRemote?.sshKey?.keyPassphrase?.isNotEmpty() ?: false
+            findPreference("ssh_see_key").isEnabled = callingActivity.currentStore.gitRemote?.sshKey?.generated ?: false
+            findPreference("git_delete_repo").isEnabled = !callingActivity.currentStore.external
+            findPreference("ssh_key_clear_passphrase").isEnabled = callingActivity.currentStore.gitRemote?.sshKey?.keyPassphrase?.isNotEmpty() ?: false
             findPreference("hotp_remember_clear_choice").isEnabled =
                     sharedPreferences.getBoolean("hotp_remember_check", false)
             findPreference("clear_after_copy").isEnabled = sharedPreferences.getString("general_show_time", "45")?.toInt() != 0
             findPreference("clear_clipboard_20x").isEnabled = sharedPreferences.getString("general_show_time", "45")?.toInt() != 0
             val keyPref = findPreference("openpgp_key_id_pref")
-            val selectedKeys: List<PgpKeyEntity> = db.pgpKeyDao().getAll(currentStore.name)
+            val selectedKeys: List<PgpKeyEntity> = db.pgpKeyDao().getAll(callingActivity.currentStore.name)
             if (selectedKeys.isEmpty()) {
                 keyPref.summary = this.resources.getString(R.string.pref_no_key_selected)
             } else {
@@ -216,13 +215,20 @@ class UserPreference : AppCompatActivity() {
 
     public override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        db = PasswordStoreDb.get(applicationContext)
+        /* Fetching current store here because PrefsFragment uses it on
+           it's onCreate()
+         */
+        currentStore = db.storeDao().getByName("default")
+
         when (intent?.getStringExtra("operation")) {
             "get_ssh_key" -> getSshKey()
             "make_ssh_key" -> makeSshKey(false)
             "git_external" -> selectExternalGitRepository()
         }
-        prefsFragment = PrefsFragment()
 
+        prefsFragment = PrefsFragment()
         fragmentManager.beginTransaction().replace(android.R.id.content, prefsFragment).commit()
 
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
@@ -230,7 +236,9 @@ class UserPreference : AppCompatActivity() {
 
     public override fun onStart() {
         super.onStart()
-        db = PasswordStoreDb.get(applicationContext)
+        /* Must refresh currentStore here. The previous activity on the
+         * stack (e.g. PasswordStore) may have updated it.
+         */
         currentStore = db.storeDao().getByName("default")
     }
 
