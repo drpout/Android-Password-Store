@@ -30,6 +30,9 @@ import androidx.appcompat.app.AppCompatActivity;
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.KeyPair;
 import org.apache.commons.io.FileUtils;
+import com.zeapo.pwdstore.db.PasswordStoreDb;
+import com.zeapo.pwdstore.db.entity.StoreEntity;
+import com.zeapo.pwdstore.db.entity.SshKey;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -112,8 +115,12 @@ public class SshKeyGen extends AppCompatActivity {
             @SuppressLint("InflateParams") final View v = inflater.inflate(R.layout.fragment_show_ssh_key, null);
             builder.setView(v);
 
+            PasswordStoreDb db = PasswordStoreDb.Companion.get(getActivity());
+            StoreEntity currentStore = db.storeDao().getByName("default");
+            SshKey sshKey = currentStore.getGitRemote().getSshKey();
+
             TextView textView = v.findViewById(R.id.public_key);
-            File file = new File(getActivity().getFilesDir() + "/.ssh_key.pub");
+            File file = new File(sshKey.getPubKeyPath());
             try {
                 textView.setText(FileUtils.readFileToString(file));
             } catch (Exception e) {
@@ -149,6 +156,8 @@ public class SshKeyGen extends AppCompatActivity {
     private static class KeyGenerateTask extends AsyncTask<String, Void, Exception> {
         private ProgressDialog pd;
         private WeakReference<SshKeyGen> weakReference;
+        private PasswordStoreDb db;
+        private StoreEntity currentStore;
 
         private KeyGenerateTask(final SshKeyGen activity) {
             weakReference = new WeakReference<>(activity);
@@ -164,12 +173,18 @@ public class SshKeyGen extends AppCompatActivity {
             int length = Integer.parseInt(strings[0]);
             String passphrase = strings[1];
             String comment = strings[2];
+            db = PasswordStoreDb.Companion.get(weakReference.get().getApplicationContext());
+            currentStore = db.storeDao().getByName("default");
+            SshKey sshKey = currentStore.getGitRemote().getSshKey();
 
             JSch jsch = new JSch();
             try {
                 KeyPair kp = KeyPair.genKeyPair(jsch, KeyPair.RSA, length);
+                String baseDir = weakReference.get().getFilesDir().toString();
+                sshKey.setPrivKeyPath(baseDir + "/.ssh_key");
+                sshKey.setPubKeyPath(baseDir + "/.ssh_key.pub");
 
-                File file = new File(weakReference.get().getFilesDir() + "/.ssh_key");
+                File file = new File(sshKey.getPrivKeyPath());
                 FileOutputStream out = new FileOutputStream(file, false);
                 if (passphrase.length() > 0) {
                     kp.writePrivateKey(out, passphrase.getBytes());
@@ -177,7 +192,7 @@ public class SshKeyGen extends AppCompatActivity {
                     kp.writePrivateKey(out);
                 }
 
-                file = new File(weakReference.get().getFilesDir() + "/.ssh_key.pub");
+                file = new File(sshKey.getPubKeyPath());
                 out = new FileOutputStream(file, false);
                 kp.writePublicKey(out, comment);
                 return null;
@@ -193,13 +208,10 @@ public class SshKeyGen extends AppCompatActivity {
             super.onPostExecute(e);
             pd.dismiss();
             if (e == null) {
+                db.storeDao().update(currentStore);
                 Toast.makeText(weakReference.get(), "SSH-key generated", Toast.LENGTH_LONG).show();
                 DialogFragment df = new ShowSshKeyFragment();
                 df.show(weakReference.get().getFragmentManager(), "public_key");
-                SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(weakReference.get());
-                SharedPreferences.Editor editor = prefs.edit();
-                editor.putBoolean("use_generated_key", true);
-                editor.apply();
             } else {
                 new AlertDialog.Builder(weakReference.get())
                         .setTitle("Error while trying to generate the ssh-key")
