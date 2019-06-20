@@ -36,6 +36,8 @@ import com.zeapo.pwdstore.PasswordGeneratorDialogFragment
 import com.zeapo.pwdstore.R
 import com.zeapo.pwdstore.UserPreference
 import com.zeapo.pwdstore.utils.Otp
+import com.zeapo.pwdstore.db.PasswordStoreDb
+import com.zeapo.pwdstore.db.entity.PgpKeyEntity
 import kotlinx.android.synthetic.main.decrypt_layout.*
 import kotlinx.android.synthetic.main.encrypt_layout.*
 import org.apache.commons.io.FileUtils
@@ -84,7 +86,6 @@ class PgpActivity : AppCompatActivity(), OpenPgpServiceConnection.OnBound {
     private val relativeParentPath: String by lazy { getParentPath(fullPath, repoPath) }
 
     val settings: SharedPreferences by lazy { PreferenceManager.getDefaultSharedPreferences(this) }
-    private val keyIDs: MutableSet<String> by lazy { settings.getStringSet("openpgp_key_ids_set", emptySet()) }
     private var mServiceConnection: OpenPgpServiceConnection? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -423,6 +424,9 @@ class PgpActivity : AppCompatActivity(), OpenPgpServiceConnection.OnBound {
         val data = Intent()
         data.action = OpenPgpApi.ACTION_ENCRYPT
 
+        val db = PasswordStoreDb.get(this)
+        val keyEntities: List<PgpKeyEntity> = db.pgpKeyDao().getAll("default")
+        val keyIDs: List<String> = keyEntities.map { it.keyId }
         // EXTRA_KEY_IDS requires long[]
         val longKeys = keyIDs.map { it.toLong() }
         data.putExtra(OpenPgpApi.EXTRA_KEY_IDS, longKeys.toLongArray())
@@ -543,10 +547,10 @@ class PgpActivity : AppCompatActivity(), OpenPgpServiceConnection.OnBound {
                 RESULT_CODE_SUCCESS -> {
                     try {
                         val ids = result.getLongArrayExtra(OpenPgpApi.RESULT_KEY_IDS)
-                        val keys = ids.map { it.toString() }.toSet()
+                        val keyEntities = ids.map { PgpKeyEntity(it.toString(), "default") }
 
-                        // use Long
-                        settings.edit().putStringSet("openpgp_key_ids_set", keys).apply()
+                        val db = PasswordStoreDb.get(this)
+                        db.pgpKeyDao().insertAll(keyEntities)
 
                         showToast("PGP keys selected")
 

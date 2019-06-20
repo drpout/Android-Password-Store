@@ -11,6 +11,9 @@ interface PgpKeyDao {
     @Insert
     fun insert(pgpKey: PgpKeyEntity)
 
+    @Insert
+    fun insertAll(pgpKeys: Collection<PgpKeyEntity>)
+
     @Delete
     fun delete(pgpKey: PgpKeyEntity)
 
