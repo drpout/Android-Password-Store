@@ -18,6 +18,8 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.zeapo.pwdstore.utils.PasswordItem;
 import com.zeapo.pwdstore.utils.PasswordRecyclerAdapter;
 import com.zeapo.pwdstore.utils.PasswordRepository;
+import com.zeapo.pwdstore.db.PasswordStoreDb;
+import com.zeapo.pwdstore.db.entity.StoreEntity;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -40,6 +42,8 @@ public class PasswordFragment extends Fragment {
     private RecyclerView recyclerView;
     private OnFragmentInteractionListener mListener;
     private SharedPreferences settings;
+    private StoreEntity currentStore;
+
     /**
      * Mandatory empty constructor for the fragment manager to instantiate the
      * fragment (e.g. upon screen orientation changes).
@@ -51,13 +55,18 @@ public class PasswordFragment extends Fragment {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         String path = getArguments().getString("Path");
+        PasswordStoreDb db = PasswordStoreDb.Companion.get(requireContext());
+        currentStore = db.storeDao().getByName("default");
 
         settings = PreferenceManager.getDefaultSharedPreferences(requireActivity());
         passListStack = new Stack<>();
         scrollPosition = new Stack<>();
         pathStack = new Stack<>();
         recyclerAdapter = new PasswordRecyclerAdapter((PasswordStore) requireActivity(), mListener,
-                PasswordRepository.getPasswords(new File(path), PasswordRepository.getRepositoryDirectory(requireContext()), getSortOrder()));
+                PasswordRepository.getPasswords(
+                    new File(path),
+                    PasswordRepository.getRepositoryDirectory(requireContext(), currentStore),
+                    getSortOrder()));
     }
 
     @Override
@@ -92,15 +101,15 @@ public class PasswordFragment extends Fragment {
                 if (item.getType() == PasswordItem.TYPE_CATEGORY) {
                     // push the current password list (non filtered plz!)
                     passListStack.push(pathStack.isEmpty() ?
-                            PasswordRepository.getPasswords(PasswordRepository.getRepositoryDirectory(context), getSortOrder()) :
-                            PasswordRepository.getPasswords(pathStack.peek(), PasswordRepository.getRepositoryDirectory(context), getSortOrder()));
+                            PasswordRepository.getPasswords(PasswordRepository.getRepositoryDirectory(context, currentStore), getSortOrder()) :
+                            PasswordRepository.getPasswords(pathStack.peek(), PasswordRepository.getRepositoryDirectory(context, currentStore), getSortOrder()));
                     //push the category were we're going
                     pathStack.push(item.getFile());
                     scrollPosition.push(recyclerView.getVerticalScrollbarPosition());
 
                     recyclerView.scrollToPosition(0);
                     recyclerAdapter.clear();
-                    recyclerAdapter.addAll(PasswordRepository.getPasswords(item.getFile(), PasswordRepository.getRepositoryDirectory(context), getSortOrder()));
+                    recyclerAdapter.addAll(PasswordRepository.getPasswords(item.getFile(), PasswordRepository.getRepositoryDirectory(context, currentStore), getSortOrder()));
 
                     ((AppCompatActivity) requireActivity()).getSupportActionBar().setDisplayHomeAsUpEnabled(true);
                 } else {
@@ -124,7 +133,7 @@ public class PasswordFragment extends Fragment {
         pathStack.clear();
         scrollPosition.clear();
         recyclerAdapter.clear();
-        recyclerAdapter.addAll(PasswordRepository.getPasswords(PasswordRepository.getRepositoryDirectory(requireContext()), getSortOrder()));
+        recyclerAdapter.addAll(PasswordRepository.getPasswords(PasswordRepository.getRepositoryDirectory(requireContext(), currentStore), getSortOrder()));
 
         ((AppCompatActivity) requireActivity()).getSupportActionBar().setDisplayHomeAsUpEnabled(false);
     }
@@ -135,8 +144,8 @@ public class PasswordFragment extends Fragment {
     public void refreshAdapter() {
         recyclerAdapter.clear();
         recyclerAdapter.addAll(pathStack.isEmpty() ?
-                PasswordRepository.getPasswords(PasswordRepository.getRepositoryDirectory(requireContext()), getSortOrder()) :
-                PasswordRepository.getPasswords(pathStack.peek(), PasswordRepository.getRepositoryDirectory(requireContext()), getSortOrder()));
+                PasswordRepository.getPasswords(PasswordRepository.getRepositoryDirectory(requireContext(), currentStore), getSortOrder()) :
+                PasswordRepository.getPasswords(pathStack.peek(), PasswordRepository.getRepositoryDirectory(requireContext(), currentStore), getSortOrder()));
     }
 
     /**
@@ -163,8 +172,8 @@ public class PasswordFragment extends Fragment {
     private void recursiveFilter(String filter, File dir) {
         // on the root the pathStack is empty
         ArrayList<PasswordItem> passwordItems = dir == null ?
-                PasswordRepository.getPasswords(PasswordRepository.getRepositoryDirectory(requireContext()), getSortOrder()) :
-                PasswordRepository.getPasswords(dir, PasswordRepository.getRepositoryDirectory(requireContext()), getSortOrder());
+                PasswordRepository.getPasswords(PasswordRepository.getRepositoryDirectory(requireContext(), currentStore), getSortOrder()) :
+                PasswordRepository.getPasswords(dir, PasswordRepository.getRepositoryDirectory(requireContext(), currentStore), getSortOrder());
 
         boolean rec = settings.getBoolean("filter_recursively", true);
         for (PasswordItem item : passwordItems) {
@@ -201,7 +210,7 @@ public class PasswordFragment extends Fragment {
      */
     public File getCurrentDir() {
         if (pathStack.isEmpty())
-            return PasswordRepository.getRepositoryDirectory(requireContext());
+            return PasswordRepository.getRepositoryDirectory(requireContext(), currentStore);
         else
             return pathStack.peek();
     }

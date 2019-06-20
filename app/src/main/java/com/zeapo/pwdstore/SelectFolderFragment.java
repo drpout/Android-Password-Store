@@ -16,6 +16,8 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.zeapo.pwdstore.utils.FolderRecyclerAdapter;
 import com.zeapo.pwdstore.utils.PasswordItem;
 import com.zeapo.pwdstore.utils.PasswordRepository;
+import com.zeapo.pwdstore.db.PasswordStoreDb;
+import com.zeapo.pwdstore.db.entity.StoreEntity;
 
 import java.io.File;
 import java.util.Stack;
@@ -34,6 +36,7 @@ public class SelectFolderFragment extends Fragment {
     private FolderRecyclerAdapter recyclerAdapter;
     private RecyclerView recyclerView;
     private OnFragmentInteractionListener mListener;
+    private StoreEntity currentStore;
     /**
      * Mandatory empty constructor for the fragment manager to instantiate the
      * fragment (e.g. upon screen orientation changes).
@@ -45,10 +48,13 @@ public class SelectFolderFragment extends Fragment {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         String path = getArguments().getString("Path");
+        PasswordStoreDb db = PasswordStoreDb.Companion.get(requireContext());
+        currentStore = db.storeDao().getByName("default");
 
         pathStack = new Stack<>();
         recyclerAdapter = new FolderRecyclerAdapter((SelectFolderActivity) requireActivity(), mListener,
-                PasswordRepository.getPasswords(new File(path), PasswordRepository.getRepositoryDirectory(requireActivity()), getSortOrder()));
+                PasswordRepository.getPasswords(new File(path),
+                    PasswordRepository.getRepositoryDirectory(requireActivity(), currentStore), getSortOrder()));
     }
 
     @Override
@@ -83,7 +89,8 @@ public class SelectFolderFragment extends Fragment {
 
                     recyclerView.scrollToPosition(0);
                     recyclerAdapter.clear();
-                    recyclerAdapter.addAll(PasswordRepository.getPasswords(item.getFile(), PasswordRepository.getRepositoryDirectory(context), getSortOrder()));
+                    recyclerAdapter.addAll(PasswordRepository.getPasswords(item.getFile(),
+                                PasswordRepository.getRepositoryDirectory(context, currentStore), getSortOrder()));
 
                     ((AppCompatActivity) requireActivity()).getSupportActionBar().setDisplayHomeAsUpEnabled(true);
                 }
@@ -101,7 +108,7 @@ public class SelectFolderFragment extends Fragment {
      */
     public File getCurrentDir() {
         if (pathStack.isEmpty())
-            return PasswordRepository.getRepositoryDirectory(requireContext());
+            return PasswordRepository.getRepositoryDirectory(requireContext(), currentStore);
         else
             return pathStack.peek();
     }
