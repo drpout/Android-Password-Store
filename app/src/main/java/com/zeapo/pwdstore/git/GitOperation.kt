@@ -21,6 +21,9 @@ import com.zeapo.pwdstore.git.config.GitConfigSessionFactory
 import com.zeapo.pwdstore.git.config.SshApiSessionFactory
 import com.zeapo.pwdstore.git.config.SshConfigSessionFactory
 import com.zeapo.pwdstore.utils.PasswordRepository
+import com.zeapo.pwdstore.db.PasswordStoreDb
+import com.zeapo.pwdstore.db.entity.StoreEntity
+import com.zeapo.pwdstore.db.entity.SshKey
 
 import org.eclipse.jgit.api.GitCommand
 import org.eclipse.jgit.lib.Repository
@@ -151,14 +154,16 @@ abstract class GitOperation(fileDir: File, internal val callingActivity: Activit
                 val layoutInflater = LayoutInflater.from(callingActivity.applicationContext)
                 @SuppressLint("InflateParams") val dialogView = layoutInflater.inflate(R.layout.git_passphrase_layout, null)
                 val passphrase = dialogView.findViewById<EditText>(R.id.sshkey_passphrase)
-                val settings = PreferenceManager.getDefaultSharedPreferences(callingActivity.applicationContext)
-                val sshKeyPassphrase = settings.getString("ssh_key_passphrase", null)
+                val db = PasswordStoreDb.get(callingActivity.applicationContext)
+                val currentStore = db.storeDao().getByName("default")
+                var sshKeyEmbed = currentStore.gitRemote?.sshKey
+                val sshKeyPassphrase = sshKeyEmbed?.keyPassphrase
                 if (showError) {
                     passphrase.error = "Wrong passphrase"
                 }
                 val jsch = JSch()
                 try {
-                    val keyPair = KeyPair.load(jsch, callingActivity.filesDir.toString() + "/.ssh_key")
+                    val keyPair = KeyPair.load(jsch, sshKeyEmbed?.privKeyPath)
 
                     if (keyPair.isEncrypted) {
                         if (sshKeyPassphrase != null && sshKeyPassphrase.isNotEmpty()) {
@@ -178,15 +183,16 @@ abstract class GitOperation(fileDir: File, internal val callingActivity: Activit
                                         if (keyPair.decrypt(passphrase.text.toString())) {
                                             val rememberPassphrase = (dialogView.findViewById<View>(R.id.sshkey_remember_passphrase) as CheckBox).isChecked
                                             if (rememberPassphrase) {
-                                                settings.edit().putString("ssh_key_passphrase", passphrase.text.toString()).apply()
+                                                sshKeyEmbed?.keyPassphrase = passphrase.text.toString()
                                             }
                                             // Authenticate using the ssh-key and then execute the command
                                             setAuthentication(sshKey, username, passphrase.text.toString()).execute()
                                         } else {
-                                            settings.edit().putString("ssh_key_passphrase", null).apply()
+                                            sshKeyEmbed?.keyPassphrase = null
                                             // call back the method
                                             executeAfterAuthentication(connectionMode, username, sshKey, identity, true)
                                         }
+                                        db.storeDao().update(currentStore)
                                     }.setNegativeButton(callingActivity.resources.getString(R.string.dialog_cancel)) { _, _ ->
                                         // Do nothing.
                                     }.show()
