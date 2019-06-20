@@ -29,6 +29,8 @@ import com.zeapo.pwdstore.R;
 import com.zeapo.pwdstore.UserPreference;
 import com.zeapo.pwdstore.git.config.SshApiSessionFactory;
 import com.zeapo.pwdstore.utils.PasswordRepository;
+import com.zeapo.pwdstore.utils.SplitFocusAwareTextWatcher;
+import com.zeapo.pwdstore.utils.UpdateFocusAwareTextWatcher;
 
 import org.apache.commons.io.FileUtils;
 import org.eclipse.jgit.lib.Constants;
@@ -178,82 +180,11 @@ public class GitActivity extends AppCompatActivity {
                 server_user.setText(settings.getString("git_remote_username", ""));
                 server_path.setText(settings.getString("git_remote_location", ""));
 
-                server_url.addTextChangedListener(new TextWatcher() {
-                    @Override
-                    public void beforeTextChanged(CharSequence charSequence, int i, int i2, int i3) {
-                    }
-
-                    @Override
-                    public void onTextChanged(CharSequence charSequence, int i, int i2, int i3) {
-                        if (server_url.isFocused())
-                            updateURI();
-                    }
-
-                    @Override
-                    public void afterTextChanged(Editable editable) {
-                    }
-                });
-                server_port.addTextChangedListener(new TextWatcher() {
-                    @Override
-                    public void beforeTextChanged(CharSequence charSequence, int i, int i2, int i3) {
-                    }
-
-                    @Override
-                    public void onTextChanged(CharSequence charSequence, int i, int i2, int i3) {
-                        if (server_port.isFocused())
-                            updateURI();
-                    }
-
-                    @Override
-                    public void afterTextChanged(Editable editable) {
-                    }
-                });
-                server_user.addTextChangedListener(new TextWatcher() {
-                    @Override
-                    public void beforeTextChanged(CharSequence charSequence, int i, int i2, int i3) {
-                    }
-
-                    @Override
-                    public void onTextChanged(CharSequence charSequence, int i, int i2, int i3) {
-                        if (server_user.isFocused())
-                            updateURI();
-                    }
-
-                    @Override
-                    public void afterTextChanged(Editable editable) {
-                    }
-                });
-                server_path.addTextChangedListener(new TextWatcher() {
-                    @Override
-                    public void beforeTextChanged(CharSequence charSequence, int i, int i2, int i3) {
-                    }
-
-                    @Override
-                    public void onTextChanged(CharSequence charSequence, int i, int i2, int i3) {
-                        if (server_path.isFocused())
-                            updateURI();
-                    }
-
-                    @Override
-                    public void afterTextChanged(Editable editable) {
-                    }
-                });
-
-                server_uri.addTextChangedListener(new TextWatcher() {
-                    @Override
-                    public void beforeTextChanged(CharSequence charSequence, int i, int i2, int i3) {
-                    }
-
-                    @Override
-                    public void onTextChanged(CharSequence charSequence, int i, int i2, int i3) {
-                        if (server_uri.isFocused())
-                            splitURI();
-                    }
-
-                    @Override
-                    public void afterTextChanged(Editable editable) {
-                    }
-                });
+                server_url.addTextChangedListener(new UpdateFocusAwareTextWatcher(server_url, this));
+                server_port.addTextChangedListener(new UpdateFocusAwareTextWatcher(server_port, this));
+                server_user.addTextChangedListener(new UpdateFocusAwareTextWatcher(server_user, this));
+                server_path.addTextChangedListener(new UpdateFocusAwareTextWatcher(server_path, this));
+                server_uri.addTextChangedListener(new SplitFocusAwareTextWatcher(server_uri, this));
 
                 if (operationCode == EDIT_SERVER) {
                     findViewById(R.id.clone_button).setVisibility(View.INVISIBLE);
@@ -291,7 +222,7 @@ public class GitActivity extends AppCompatActivity {
     /**
      * Fills in the server_uri field with the information coming from other fields
      */
-    private void updateURI() {
+    public void updateURI() {
         EditText uri = findViewById(R.id.clone_uri);
         EditText server_url = findViewById(R.id.server_url);
         EditText server_port = findViewById(R.id.server_port);
@@ -351,7 +282,7 @@ public class GitActivity extends AppCompatActivity {
     /**
      * Splits the information in server_uri into the other fields
      */
-    private void splitURI() {
+    public void splitURI() {
         EditText server_uri = findViewById(R.id.clone_uri);
         EditText server_url = findViewById(R.id.server_url);
         EditText server_port = findViewById(R.id.server_port);
