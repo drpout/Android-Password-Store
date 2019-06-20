@@ -21,6 +21,8 @@ import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
+import com.zeapo.pwdstore.db.entity.StoreEntity
+import com.zeapo.pwdstore.db.PasswordStoreDb
 import com.zeapo.pwdstore.PasswordEntry
 import com.zeapo.pwdstore.R
 import com.zeapo.pwdstore.utils.PasswordRepository
@@ -56,19 +58,22 @@ class AutofillService : AccessibilityService() {
     private var webViewURL: String? = null
     private var lastPassword: PasswordEntry? = null
     private var lastPasswordMaxDate: Long = 0
+    private lateinit var currentStore: StoreEntity
 
     fun setResultData(data: Intent) {
         resultData = data
     }
 
     fun setPickedPassword(path: String) {
-        items.add(File("${PasswordRepository.getRepositoryDirectory(applicationContext)}/$path.gpg"))
+        items.add(File("${PasswordRepository.getRepositoryDirectory(applicationContext, currentStore)}/$path.gpg"))
         bindDecryptAndVerify()
     }
 
     override fun onCreate() {
         super.onCreate()
         instance = this
+        val db = PasswordStoreDb.Companion.get(this.getApplicationContext());
+        currentStore = db.storeDao().getByName("default");
     }
 
     override fun onServiceConnected() {
@@ -292,9 +297,9 @@ class AutofillService : AccessibilityService() {
         when (preference) {
             "/first" -> {
                 if (!PasswordRepository.isInitialized()) {
-                    PasswordRepository.initialize(this)
+                    PasswordRepository.initialize(this, currentStore)
                 }
-                items = searchPasswords(PasswordRepository.getRepositoryDirectory(this), webViewTitle)
+                items = searchPasswords(PasswordRepository.getRepositoryDirectory(this, currentStore), webViewTitle)
             }
             "/never" -> items = ArrayList()
             else -> getPreferredPasswords(preference)
@@ -314,9 +319,9 @@ class AutofillService : AccessibilityService() {
         when (preference) {
             "/first" -> {
                 if (!PasswordRepository.isInitialized()) {
-                    PasswordRepository.initialize(this)
+                    PasswordRepository.initialize(this, currentStore)
                 }
-                items = searchPasswords(PasswordRepository.getRepositoryDirectory(this), appName)
+                items = searchPasswords(PasswordRepository.getRepositoryDirectory(this, currentStore), appName)
             }
             "/never" -> items = ArrayList()
             else -> getPreferredPasswords(preference)
@@ -327,12 +332,12 @@ class AutofillService : AccessibilityService() {
     // file into the items list.
     private fun getPreferredPasswords(preference: String) {
         if (!PasswordRepository.isInitialized()) {
-            PasswordRepository.initialize(this)
+            PasswordRepository.initialize(this, currentStore)
         }
         val preferredPasswords = preference.splitLines()
         items = ArrayList()
         for (password in preferredPasswords) {
-            val path = PasswordRepository.getRepositoryDirectory(applicationContext).toString() + "/" + password + ".gpg"
+            val path = PasswordRepository.getRepositoryDirectory(applicationContext, currentStore).toString() + "/" + password + ".gpg"
             if (File(path).exists()) {
                 items.add(File(path))
             }
