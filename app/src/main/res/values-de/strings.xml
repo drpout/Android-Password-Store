@@ -60,7 +60,7 @@
     <string name="server_user_hint">Git-Nutzername</string>
 
     <string name="server_resulting_url">Erzeugte URL</string>
-    <string name="connection_mode">Authentifizierungsmethode</string>
+    <string name="auth_method">Authentifizierungsmethode</string>
 
     <string name="warn_malformed_url_port">Wenn du einen anderen Port nutzt, setze den absoluten Pfad (startet mit "/")</string>
     <string name="invalid_email_dialog_text">Bitte valide Email eingeben</string>

@@ -10,7 +10,7 @@
     <string name="autofill_description">在app中自动输入密码. 此功能只在 Andorid 4.3 及以上版本中可用. 在 Andorid 5.0 及以上版本中不依赖剪贴板</string>
     <string name="clipboard_password_toast_text">密码已复制到剪贴板, 你有 %d 秒的时间将其粘贴到其他地方.</string>
     <string name="clone">从服务器Clone</string>
-    <string name="connection_mode">认证模式</string>
+    <string name="auth_method">认证模式</string>
     <string name="creation_dialog_text">在尝试添加密码或任何同步操作前请在下方克隆或添加一个新的 Repo</string>
     <string name="default_https_port">443</string>
     <string name="default_ssh_port">22</string>

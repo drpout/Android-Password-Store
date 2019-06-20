@@ -24,6 +24,7 @@ import com.zeapo.pwdstore.utils.PasswordRepository
 import com.zeapo.pwdstore.db.PasswordStoreDb
 import com.zeapo.pwdstore.db.entity.StoreEntity
 import com.zeapo.pwdstore.db.entity.SshKey
+import com.zeapo.pwdstore.db.entity.AuthMethod
 
 import org.eclipse.jgit.api.GitCommand
 import org.eclipse.jgit.lib.Repository
@@ -92,33 +93,33 @@ abstract class GitOperation(fileDir: File, internal val callingActivity: Activit
     /**
      * Executes the GitCommand in an async task after creating the authentication
      *
-     * @param connectionMode the server-connection mode
+     * @param authMethod     the authentication method
      * @param username       the username
      * @param sshKey         the ssh-key file to use in ssh-key connection mode
      * @param identity       the api identity to use for auth in OpenKeychain connection mode
      */
-    fun executeAfterAuthentication(connectionMode: String,
+    fun executeAfterAuthentication(authMethod: AuthMethod,
                                    username: String,
                                    sshKey: File?,
                                    identity: SshApiSessionFactory.ApiIdentity?) {
-        executeAfterAuthentication(connectionMode, username, sshKey, identity, false)
+        executeAfterAuthentication(authMethod, username, sshKey, identity, false)
     }
 
     /**
      * Executes the GitCommand in an async task after creating the authentication
      *
-     * @param connectionMode the server-connection mode
+     * @param authMethod     the authentication method
      * @param username       the username
      * @param sshKey         the ssh-key file to use in ssh-key connection mode
      * @param identity       the api identity to use for auth in OpenKeychain connection mode
      * @param showError      show the passphrase edit text in red
      */
-    private fun executeAfterAuthentication(connectionMode: String,
+    private fun executeAfterAuthentication(authMethod: AuthMethod,
                                            username: String,
                                            sshKey: File?,
                                            identity: SshApiSessionFactory.ApiIdentity?,
                                            showError: Boolean) {
-        if (connectionMode.equals("ssh-key", ignoreCase = true)) {
+        if (authMethod.equals(AuthMethod.SSH_KEY)) {
             if (sshKey == null || !sshKey.exists()) {
                 AlertDialog.Builder(callingActivity)
                         .setMessage(callingActivity.resources.getString(R.string.ssh_preferences_dialog_text))
@@ -172,7 +173,7 @@ abstract class GitOperation(fileDir: File, internal val callingActivity: Activit
                                 setAuthentication(sshKey, username, sshKeyPassphrase).execute()
                             } else {
                                 // call back the method
-                                executeAfterAuthentication(connectionMode, username, sshKey, identity, true)
+                                executeAfterAuthentication(authMethod, username, sshKey, identity, true)
                             }
                         } else {
                             AlertDialog.Builder(callingActivity)
@@ -190,7 +191,7 @@ abstract class GitOperation(fileDir: File, internal val callingActivity: Activit
                                         } else {
                                             sshKeyEmbed?.keyPassphrase = null
                                             // call back the method
-                                            executeAfterAuthentication(connectionMode, username, sshKey, identity, true)
+                                            executeAfterAuthentication(authMethod, username, sshKey, identity, true)
                                         }
                                         db.storeDao().update(currentStore)
                                     }.setNegativeButton(callingActivity.resources.getString(R.string.dialog_cancel)) { _, _ ->
@@ -209,7 +210,7 @@ abstract class GitOperation(fileDir: File, internal val callingActivity: Activit
                 }
 
             }
-        } else if (connectionMode.equals("OpenKeychain", ignoreCase = true)) {
+        } else if (authMethod.equals(AuthMethod.PGP)) {
             setAuthentication(username, identity).execute()
         } else {
             val password = EditText(callingActivity)

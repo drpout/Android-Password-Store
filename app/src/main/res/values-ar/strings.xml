@@ -45,7 +45,7 @@
     <string name="server_user_hint">git_username</string>
 
     <string name="server_resulting_url">عنوان الرابط الناتج</string>
-    <string name="connection_mode">نوع المصادقة</string>
+    <string name="auth_method">نوع المصادقة</string>
 
     <string name="invalid_email_dialog_text">يرجى إدخال عنوان بريد إلكتروني صالح</string>
     <string name="clone_button">أنسخ !</string>

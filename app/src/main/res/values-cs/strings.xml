@@ -55,7 +55,7 @@
     <string name="server_user_hint">git_username</string>
 
     <string name="server_resulting_url">Výsledná URL</string>
-    <string name="connection_mode">Mód ověření</string>
+    <string name="auth_method">Mód ověření</string>
 
     <string name="warn_malformed_url_port">Při použití vlastního portu, zadejte absolutní cestu (začíná "/")</string>
 

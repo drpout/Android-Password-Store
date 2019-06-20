@@ -58,7 +58,7 @@
     <string name="server_user_hint">git_username</string>
 
     <string name="server_resulting_url">結果 URL</string>
-    <string name="connection_mode">認証モード</string>
+    <string name="auth_method">認証モード</string>
 
     <string name="warn_malformed_url_port">カスタムポートを使用する場合は、絶対パスを入力 ("/" で始まる)</string>
 

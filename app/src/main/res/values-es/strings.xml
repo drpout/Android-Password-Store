@@ -75,7 +75,7 @@
     <string name="server_user_hint">nombre_usuario</string>
 
     <string name="server_resulting_url">URL resultante</string>
-    <string name="connection_mode">Modo de autenticación</string>
+    <string name="auth_method">Modo de autenticación</string>
 
     <string name="warn_malformed_url_port">Al usar puertos personalizados, ingresa una ruta absoluta (empieza con "/")</string>
 

@@ -62,7 +62,7 @@
     <string name="server_user_hint">git_username</string>
 
     <string name="server_resulting_url">Получившийся URL</string>
-    <string name="connection_mode">Тип авторизации</string>
+    <string name="auth_method">Тип авторизации</string>
 
     <string name="warn_malformed_url_port">При использовании нестандартных портов, укажите полный путь (начинается с "/")</string>
 

@@ -57,7 +57,7 @@
     <string name="server_user_hint">git_username</string>
 
     <string name="server_resulting_url">URL finale</string>
-    <string name="connection_mode">Méthode d\'authentification</string>
+    <string name="auth_method">Méthode d\'authentification</string>
 
     <string name="warn_malformed_url_port">Lors de l\'utilisation d\'un numéro de port personnalisé, fournissez un chemin absolu  (commençant par "/")</string>
 

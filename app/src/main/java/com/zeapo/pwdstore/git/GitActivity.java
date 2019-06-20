@@ -22,6 +22,9 @@ import android.widget.TextView;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.zeapo.pwdstore.db.entity.StoreEntity;
+import com.zeapo.pwdstore.db.entity.AuthMethod;
+import com.zeapo.pwdstore.db.PasswordStoreDb;
 import com.zeapo.pwdstore.R;
 import com.zeapo.pwdstore.UserPreference;
 import com.zeapo.pwdstore.git.config.SshApiSessionFactory;
@@ -32,11 +35,16 @@ import org.eclipse.jgit.lib.Constants;
 import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.Ref;
 import org.eclipse.jgit.lib.Repository;
+import org.eclipse.jgit.lib.StoredConfig;
+import org.eclipse.jgit.lib.UserConfig;
+import org.eclipse.jgit.transport.RemoteConfig;
+import org.eclipse.jgit.transport.URIish;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.net.URISyntaxException;
 
 public class GitActivity extends AppCompatActivity {
     public static final int REQUEST_PULL = 101;
@@ -53,9 +61,11 @@ public class GitActivity extends AppCompatActivity {
     private Activity activity;
     private Context context;
     private String protocol;
-    private String connectionMode;
+    private AuthMethod authMethod;
     private String hostname;
     private SharedPreferences settings;
+    private PasswordStoreDb db;
+    private StoreEntity currentStore;
     private SshApiSessionFactory.IdentityBuilder identityBuilder;
     private SshApiSessionFactory.ApiIdentity identity;
 
@@ -67,9 +77,18 @@ public class GitActivity extends AppCompatActivity {
         activity = this;
 
         settings = PreferenceManager.getDefaultSharedPreferences(this.context);
+        db = PasswordStoreDb.Companion.get(this.getApplicationContext());
+        currentStore = db.storeDao().getByName("default");
+        StoredConfig repoConfig = PasswordRepository.getRepository(PasswordRepository.getRepositoryDirectory(activity.getApplicationContext(), currentStore)).getConfig();
+        try {
+            RemoteConfig remoteConfig = new RemoteConfig(repoConfig, "origin");
+            protocol = remoteConfig.getURIs().get(0).getScheme();
+        } catch(URISyntaxException e) {
+            protocol = "ssh://";
+            Log.e(TAG, "Caught exception while creating RemoteConfig " + e);
+        }
+        authMethod = currentStore.getGitRemote().getAuth();
 
-        protocol = settings.getString("git_remote_protocol", "ssh://");
-        connectionMode = settings.getString("git_remote_auth", "ssh-key");
         int operationCode = getIntent().getExtras().getInt("Operation");
 
         getSupportActionBar().setDisplayHomeAsUpEnabled(true);
@@ -80,20 +99,17 @@ public class GitActivity extends AppCompatActivity {
                 setContentView(R.layout.activity_git_clone);
                 setTitle(R.string.title_activity_git_clone);
 
-                final Spinner protcol_spinner = findViewById(R.id.clone_protocol);
-                final Spinner connection_mode_spinner = findViewById(R.id.connection_mode);
-
-                // init the spinner for connection modes
-                final ArrayAdapter<CharSequence> connection_mode_adapter = ArrayAdapter.createFromResource(this,
-                        R.array.connection_modes, android.R.layout.simple_spinner_item);
-                connection_mode_adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-                connection_mode_spinner.setAdapter(connection_mode_adapter);
-                connection_mode_spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+                // init the spinner for authentication methods
+                final Spinner authMethodSpinner = findViewById(R.id.auth_method);
+                final ArrayAdapter<CharSequence> authMethodAdapter = ArrayAdapter.createFromResource(this,
+                        R.array.auth_methods, android.R.layout.simple_spinner_item);
+                authMethodAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+                authMethodSpinner.setAdapter(authMethodAdapter);
+                authMethodSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
                     @Override
-                    public void onItemSelected(AdapterView<?> adapterView, View view, int i, long l) {
-                        String selection = ((Spinner) findViewById(R.id.connection_mode)).getSelectedItem().toString();
-                        connectionMode = selection;
-                        settings.edit().putString("git_remote_auth", selection).apply();
+                    public void onItemSelected(AdapterView<?> adapterView, View view, int position, long id) {
+                        authMethod = AuthMethod.values()[position];
+                        currentStore.getGitRemote().setAuth(authMethod);
                     }
 
                     @Override
@@ -103,11 +119,12 @@ public class GitActivity extends AppCompatActivity {
                 });
 
                 // init the spinner for protocols
-                ArrayAdapter<CharSequence> protocol_adapter = ArrayAdapter.createFromResource(this,
+                final Spinner protocolSpinner = findViewById(R.id.clone_protocol);
+                ArrayAdapter<CharSequence> protocolAdapter = ArrayAdapter.createFromResource(this,
                         R.array.clone_protocols, android.R.layout.simple_spinner_item);
-                protocol_adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-                protcol_spinner.setAdapter(protocol_adapter);
-                protcol_spinner.setOnItemSelectedListener(
+                protocolAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+                protocolSpinner.setAdapter(protocolAdapter);
+                protocolSpinner.setOnItemSelectedListener(
                         new AdapterView.OnItemSelectedListener() {
                             @Override
                             public void onItemSelected(AdapterView<?> adapterView, View view, int i, long l) {
@@ -118,25 +135,19 @@ public class GitActivity extends AppCompatActivity {
                                     ((EditText) findViewById(R.id.server_port)).setHint(R.string.default_ssh_port);
 
                                     // select ssh-key auth mode as default and enable the spinner in case it was disabled
-                                    connection_mode_spinner.setSelection(0);
-                                    connection_mode_spinner.setEnabled(true);
+                                    authMethodSpinner.setSelection(0);
+                                    authMethodSpinner.setEnabled(true);
 
                                     // however, if we have some saved that, that's more important!
-                                    if (connectionMode.equalsIgnoreCase("ssh-key")) {
-                                        connection_mode_spinner.setSelection(0);
-                                    } else if (connectionMode.equalsIgnoreCase("OpenKeychain")) {
-                                        connection_mode_spinner.setSelection(2);
-                                    } else {
-                                        connection_mode_spinner.setSelection(1);
-                                    }
+                                    authMethodSpinner.setSelection(authMethod.ordinal());
                                 } else {
                                     ((EditText) findViewById(R.id.clone_uri)).setHint("hostname/path");
 
                                     ((EditText) findViewById(R.id.server_port)).setHint(R.string.default_https_port);
 
                                     // select user/pwd auth-mode and disable the spinner
-                                    connection_mode_spinner.setSelection(1);
-                                    connection_mode_spinner.setEnabled(false);
+                                    authMethodSpinner.setSelection(1);
+                                    authMethodSpinner.setEnabled(false);
                                 }
 
                                 updateURI();
@@ -150,9 +161,9 @@ public class GitActivity extends AppCompatActivity {
                 );
 
                 if (protocol.equals("ssh://")) {
-                    protcol_spinner.setSelection(0);
+                    protocolSpinner.setSelection(0);
                 } else {
-                    protcol_spinner.setSelection(1);
+                    protocolSpinner.setSelection(1);
                 }
 
                 // init the server information
@@ -482,7 +493,7 @@ public class GitActivity extends AppCompatActivity {
         git_user_email.setText(settings.getString("git_config_user_email", ""));
 
         // git status
-        Repository repo = PasswordRepository.getRepository(PasswordRepository.getRepositoryDirectory(activity.getApplicationContext()));
+        Repository repo = PasswordRepository.getRepository(PasswordRepository.getRepositoryDirectory(activity.getApplicationContext(), currentStore));
         if (repo != null) {
             final TextView git_commit_hash = findViewById(R.id.git_commit_hash);
             try {
@@ -541,9 +552,9 @@ public class GitActivity extends AppCompatActivity {
      */
     public void cloneRepository(View view) {
         if (PasswordRepository.getRepository(null) == null) {
-            PasswordRepository.initialize(this);
+            PasswordRepository.initialize(this, currentStore);
         }
-        File localDir = PasswordRepository.getRepositoryDirectory(context);
+        File localDir = PasswordRepository.getRepositoryDirectory(context, currentStore);
 
         if (!saveConfiguration())
             return;
@@ -634,14 +645,14 @@ public class GitActivity extends AppCompatActivity {
      */
     protected void launchGitOperation(int operation) {
         GitOperation op;
-        File localDir = PasswordRepository.getRepositoryDirectory(context);
+        File localDir = PasswordRepository.getRepositoryDirectory(context, currentStore);
 
         try {
 
             // Before launching the operation with OpenKeychain auth, we need to issue several requests
             // to the OpenKeychain API. IdentityBuild will take care of launching the relevant intents,
             // we just need to keep calling it until it returns a completed ApiIdentity.
-            if (connectionMode.equalsIgnoreCase("OpenKeychain") && identity == null) {
+            if (authMethod.equals(AuthMethod.PGP) && identity == null) {
                 // Lazy initialization of the IdentityBuilder
                 if (identityBuilder == null) {
                     identityBuilder = new SshApiSessionFactory.IdentityBuilder(this);
@@ -686,7 +697,7 @@ public class GitActivity extends AppCompatActivity {
                     return;
             }
 
-            op.executeAfterAuthentication(connectionMode,
+            op.executeAfterAuthentication(authMethod,
                     settings.getString("git_remote_username", "git"),
                     new File(getFilesDir() + "/.ssh_key"),
                     identity);
