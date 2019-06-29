@@ -81,14 +81,33 @@ public class GitActivity extends AppCompatActivity {
         settings = PreferenceManager.getDefaultSharedPreferences(this.context);
         db = PasswordStoreDb.Companion.get(this.getApplicationContext());
         currentStore = db.storeDao().getByName("default");
-        StoredConfig repoConfig = PasswordRepository.getRepository(PasswordRepository.getRepositoryDirectory(activity.getApplicationContext(), currentStore)).getConfig();
-        try {
-            RemoteConfig remoteConfig = new RemoteConfig(repoConfig, "origin");
-            protocol = remoteConfig.getURIs().get(0).getScheme();
-        } catch(URISyntaxException e) {
+
+        // init the server information
+        final EditText serverUrl = findViewById(R.id.server_url);
+        final EditText serverPort = findViewById(R.id.server_port);
+        final EditText serverPath = findViewById(R.id.server_path);
+        final EditText serverUser = findViewById(R.id.server_user);
+        final EditText serverUri = findViewById(R.id.clone_uri);
+        Repository repository = PasswordRepository.getRepository(PasswordRepository.getRepositoryDirectory(activity.getApplicationContext(), currentStore));
+        if(repository != null) {
+            try {
+                StoredConfig repoConfig = repository.getConfig();
+                RemoteConfig remoteConfig = new RemoteConfig(repoConfig, "origin");
+                URIish uriish = remoteConfig.getURIs().get(0);
+                protocol = uriish.getScheme();
+                serverUrl.setText(uriish.getHost());
+                serverPort.setText(uriish.getPort());
+                serverUser.setText(uriish.getUser());
+                serverPath.setText(uriish.getPath());
+            } catch(URISyntaxException e) {
+                protocol = "ssh://";
+                Log.e(TAG, "Caught exception while creating RemoteConfig " + e);
+            }
+        } else {
             protocol = "ssh://";
-            Log.e(TAG, "Caught exception while creating RemoteConfig " + e);
+            Log.d(TAG, "onCreate: git repository is not initialized.");
         }
+
         authMethod = currentStore.getGitRemote().getAuth();
 
         int operationCode = getIntent().getExtras().getInt("Operation");
@@ -168,23 +187,11 @@ public class GitActivity extends AppCompatActivity {
                     protocolSpinner.setSelection(1);
                 }
 
-                // init the server information
-                final EditText server_url = findViewById(R.id.server_url);
-                final EditText server_port = findViewById(R.id.server_port);
-                final EditText server_path = findViewById(R.id.server_path);
-                final EditText server_user = findViewById(R.id.server_user);
-                final EditText server_uri = findViewById(R.id.clone_uri);
-
-                server_url.setText(settings.getString("git_remote_server", ""));
-                server_port.setText(settings.getString("git_remote_port", ""));
-                server_user.setText(settings.getString("git_remote_username", ""));
-                server_path.setText(settings.getString("git_remote_location", ""));
-
-                server_url.addTextChangedListener(new UpdateFocusAwareTextWatcher(server_url, this));
-                server_port.addTextChangedListener(new UpdateFocusAwareTextWatcher(server_port, this));
-                server_user.addTextChangedListener(new UpdateFocusAwareTextWatcher(server_user, this));
-                server_path.addTextChangedListener(new UpdateFocusAwareTextWatcher(server_path, this));
-                server_uri.addTextChangedListener(new SplitFocusAwareTextWatcher(server_uri, this));
+                serverUrl.addTextChangedListener(new UpdateFocusAwareTextWatcher(serverUrl, this));
+                serverPort.addTextChangedListener(new UpdateFocusAwareTextWatcher(serverPort, this));
+                serverUser.addTextChangedListener(new UpdateFocusAwareTextWatcher(serverUser, this));
+                serverPath.addTextChangedListener(new UpdateFocusAwareTextWatcher(serverPath, this));
+                serverUri.addTextChangedListener(new SplitFocusAwareTextWatcher(serverUri, this));
 
                 if (operationCode == EDIT_SERVER) {
                     findViewById(R.id.clone_button).setVisibility(View.INVISIBLE);
@@ -224,32 +231,32 @@ public class GitActivity extends AppCompatActivity {
      */
     public void updateURI() {
         EditText uri = findViewById(R.id.clone_uri);
-        EditText server_url = findViewById(R.id.server_url);
-        EditText server_port = findViewById(R.id.server_port);
-        EditText server_path = findViewById(R.id.server_path);
-        EditText server_user = findViewById(R.id.server_user);
+        EditText serverUrl = findViewById(R.id.server_url);
+        EditText serverPort = findViewById(R.id.server_port);
+        EditText serverPath = findViewById(R.id.server_path);
+        EditText serverUser = findViewById(R.id.server_user);
 
         if (uri != null) {
             switch (protocol) {
                 case "ssh://": {
                     String hostname =
-                            server_user.getText()
+                            serverUser.getText()
                                     + "@" +
-                                    server_url.getText().toString().trim()
+                                    serverUrl.getText().toString().trim()
                                     + ":";
-                    if (server_port.getText().toString().equals("22")) {
-                        hostname += server_path.getText().toString();
+                    if (serverPort.getText().toString().equals("22")) {
+                        hostname += serverPath.getText().toString();
 
                         findViewById(R.id.warn_url).setVisibility(View.GONE);
                     } else {
                         TextView warn_url = findViewById(R.id.warn_url);
-                        if (!server_path.getText().toString().matches("/.*") && !server_port.getText().toString().isEmpty()) {
+                        if (!serverPath.getText().toString().matches("/.*") && !serverPort.getText().toString().isEmpty()) {
                             warn_url.setText(R.string.warn_malformed_url_port);
                             warn_url.setVisibility(View.VISIBLE);
                         } else {
                             warn_url.setVisibility(View.GONE);
                         }
-                        hostname += server_port.getText().toString() + server_path.getText().toString();
+                        hostname += serverPort.getText().toString() + serverPath.getText().toString();
                     }
 
                     if (!hostname.equals("@:")) uri.setText(hostname);
@@ -257,16 +264,16 @@ public class GitActivity extends AppCompatActivity {
                 break;
                 case "https://": {
                     StringBuilder hostname = new StringBuilder();
-                    hostname.append(server_url.getText().toString().trim());
+                    hostname.append(serverUrl.getText().toString().trim());
 
-                    if (server_port.getText().toString().equals("443")) {
-                        hostname.append(server_path.getText().toString());
+                    if (serverPort.getText().toString().equals("443")) {
+                        hostname.append(serverPath.getText().toString());
 
                         findViewById(R.id.warn_url).setVisibility(View.GONE);
                     } else {
                         hostname.append("/");
-                        hostname.append(server_port.getText().toString())
-                                .append(server_path.getText().toString());
+                        hostname.append(serverPort.getText().toString())
+                                .append(serverPath.getText().toString());
                     }
 
                     if (!hostname.toString().equals("@/")) uri.setText(hostname);
@@ -283,27 +290,27 @@ public class GitActivity extends AppCompatActivity {
      * Splits the information in server_uri into the other fields
      */
     public void splitURI() {
-        EditText server_uri = findViewById(R.id.clone_uri);
-        EditText server_url = findViewById(R.id.server_url);
-        EditText server_port = findViewById(R.id.server_port);
-        EditText server_path = findViewById(R.id.server_path);
-        EditText server_user = findViewById(R.id.server_user);
+        EditText serverUri = findViewById(R.id.clone_uri);
+        EditText serverUrl = findViewById(R.id.server_url);
+        EditText serverPort = findViewById(R.id.server_port);
+        EditText serverPath = findViewById(R.id.server_path);
+        EditText serverUser = findViewById(R.id.server_user);
 
-        String uri = server_uri.getText().toString();
+        String uri = serverUri.getText().toString();
         Pattern pattern = Pattern.compile("(.+)@([\\w\\d.]+):([\\d]+)*(.*)");
         Matcher matcher = pattern.matcher(uri);
         if (matcher.find()) {
             int count = matcher.groupCount();
             if (count > 1) {
-                server_user.setText(matcher.group(1));
-                server_url.setText(matcher.group(2));
+                serverUser.setText(matcher.group(1));
+                serverUrl.setText(matcher.group(2));
             }
             if (count == 4) {
-                server_port.setText(matcher.group(3));
-                server_path.setText(matcher.group(4));
+                serverPort.setText(matcher.group(3));
+                serverPath.setText(matcher.group(4));
 
                 TextView warn_url = findViewById(R.id.warn_url);
-                if (!server_path.getText().toString().matches("/.*") && !server_port.getText().toString().isEmpty()) {
+                if (!serverPath.getText().toString().matches("/.*") && !serverPort.getText().toString().isEmpty()) {
                     warn_url.setText(R.string.warn_malformed_url_port);
                     warn_url.setVisibility(View.VISIBLE);
                 } else {
